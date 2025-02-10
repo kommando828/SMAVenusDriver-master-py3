@@ -77,7 +77,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   # Replace the inverter SVG with a custom yellow Sunny Island version
   cp SMAVenusDriver-master/assets/overview-inverter.svg "${ROOT_DIR}/opt/victronenergy/themes/ccgx/images"
 
-  chmod +x "${DBUS_SMA_DIR}/dbus-smaDJH.py"
+  chmod +x "${DBUS_SMA_DIR}/install/dbus-smaDJH.py"
   chmod +x "${DBUS_SMA_DIR}/service/run"
   chmod +x "${DBUS_SMA_DIR}/service/log/run"
   ln -s "${ROOT_DIR}/opt/victronenergy/vrmlogger/ext/" "${DBUS_SMA_DIR}/ext"
