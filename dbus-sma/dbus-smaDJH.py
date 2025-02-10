@@ -634,11 +634,11 @@ class SmaDriver:
         """
         try:
             dir_path = os.path.dirname(os.path.realpath(__file__))
-            with open(os.path.join(dir_path, "dbus-sma.yaml"), "r") as yamlfile:
+            with open(os.path.join(dir_path, "dbus-smaDJH.yaml"), "r") as yamlfile:
                 config = yaml.load(yamlfile, Loader=yaml.FullLoader)
                 return config
         except Exception:
-            logger.info("dbus-sma.yaml file not found or incorrect.")
+            logger.info("dbus-smaDJH.yaml file not found or incorrect.")
             sys.exit(1)
 
 

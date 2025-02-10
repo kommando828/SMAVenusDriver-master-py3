@@ -67,7 +67,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   fi
 
   echo "==== Installing SMA SI driver ===="
-  DBUS_NAME="dbus-sma"
+  DBUS_NAME="dbus-smaDJH"
   DBUS_SMA_DIR="${ROOT_DIR}/data/etc/${DBUS_NAME}"
 
   mkdir -p "${ROOT_DIR}/var/log/${DBUS_NAME}"
@@ -77,7 +77,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   # Replace the inverter SVG with a custom yellow Sunny Island version
   cp SMAVenusDriver-master/assets/overview-inverter.svg "${ROOT_DIR}/opt/victronenergy/themes/ccgx/images"
 
-  chmod +x "${DBUS_SMA_DIR}/dbus-sma.py"
+  chmod +x "${DBUS_SMA_DIR}/dbus-smaDJH.py"
   chmod +x "${DBUS_SMA_DIR}/service/run"
   chmod +x "${DBUS_SMA_DIR}/service/log/run"
   ln -s "${ROOT_DIR}/opt/victronenergy/vrmlogger/ext/" "${DBUS_SMA_DIR}/ext"
