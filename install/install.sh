@@ -1,109 +1,91 @@
 #!/bin/bash
+set -euo pipefail
 
-# for testing purposes
-#ROOT_DIR="/tmp/venus"
-#mkdir -p ${ROOT_DIR}/data/etc
-#mkdir -p ${ROOT_DIR}/var/log
-#mkdir -p ${ROOT_DIR}/service
-#mkdir -p ${ROOT_DIR}/etc/udev/rules.d
+# For testing purposes, you can uncomment the following lines:
+# ROOT_DIR="/tmp/venus"
+# mkdir -p "${ROOT_DIR}/data/etc"
+# mkdir -p "${ROOT_DIR}/var/log"
+# mkdir -p "${ROOT_DIR}/service"
+# mkdir -p "${ROOT_DIR}/etc/udev/rules.d"
 ROOT_DIR=""
 
-# download this script:
-# wget https://github.com/madsci1016/SMAVenusDriver/raw/master/install/install.sh
-
 echo
-echo "Please ensure your socketcan enable canable USB adapter is plugged into the Venus"
-echo "If your canable.io adapter is using factory default slcan firmware, exit this"
-echo "script and install the \"candlelight\" firmware"
+echo "Please ensure your socketcan-enabled canable USB adapter is plugged into the Venus."
+echo "If your canable.io adapter is still using the factory-default slcan firmware, exit this script and install the 'candlelight' firmware."
 echo
 echo "This script requires internet access to install dependencies and software."
 echo
-echo "Install SMA Sunny Island driver (w/ virtual BMS) on Venus OS at your own risk?"
-read -p "[Y to proceed] " -n 1 -r
+read -p "Install SMA Sunny Island driver (with virtual BMS) on Venus OS at your own risk? [Y to proceed] " -n 1 -r
+echo
 
-echo    # (optional) move to a new line
-if [[ $REPLY =~ ^[Yy]$ ]]
-then
-  echo "Install dependencies (pip and python libs)?"
-  read -p "[Y to proceed] " -n 1 -r
-  echo    # (optional) move to a new line
-  if [[ $REPLY =~ ^[Yy]$ ]]
-  then
-
-    echo "==== Download and install dependencies ===="
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  read -p "Install dependencies (pip and Python libraries)? [Y to proceed] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "==== Updating package list and installing Python3 dependencies ===="
     opkg update
-    opkg install python-misc python-distutils python-numbers python-html python-ctypes python-pkgutil
-    opkg install python-unittest python-difflib python-compile gcc binutils python-dev python-unixadmin python-xmlrpc
+    opkg install python3-misc python3-distutils python3-numbers python3-html python3-ctypes python3-pkgutil
+    opkg install python3-unittest python3-difflib gcc binutils python3-dev python3-unixadmin python3-xmlrpc
 
-    wget https://bootstrap.pypa.io/2.7/get-pip.py
-    python get-pip.py
+    echo "==== Downloading and installing pip for Python3 ===="
+    wget https://bootstrap.pypa.io/get-pip.py
+    python3 get-pip.py
     rm get-pip.py
 
-    pip install python-can
-    pip install python-statemachine
-    pip install pyyaml
+    echo "==== Installing required Python packages via pip3 ===="
+    pip3 install python-can python-statemachine pyyaml
   fi
 
-	echo "==== Download driver and library ===="
+  echo "==== Downloading driver and library ===="
+  wget -O master.zip https://github.com/madsci1016/SMAVenusDriver/archive/master.zip
+  unzip -qo master.zip
+  rm master.zip
 
-	wget https://github.com/madsci1016/SMAVenusDriver/archive/master.zip
-	unzip -qo master.zip
-	rm master.zip
-
-	echo "==== Add canable device to udev ===="
-
-  error_msg="WARNING: Was unable to modify 99-candlelight.rules with device serial number automatically"
-
+  echo "==== Installing udev rule for the canable device ===="
+  local_udev_dir="${ROOT_DIR}/etc/udev/rules.d"
+  mkdir -p "$local_udev_dir"
   template_udev_file="SMAVenusDriver-master/install/99-candlelight.rules"
-  udev_file="${ROOT_DIR}/etc/udev/rules.d/99-candlelight.rules"
-  cp $template_udev_file $udev_file
+  udev_file="${local_udev_dir}/99-candlelight.rules"
+  cp "$template_udev_file" "$udev_file"
 
-  # grab the details of the canable usb adapter
-  value=`usb-devices | grep -A2 canable.io`
-
-  # get the serial number of the canable usb adapter
-  var="$(cut -d'=' -f 2 <<< $value)"
+  # Grab the details of the canable USB adapter
+  value=$(usb-devices | grep -A2 "canable.io" || true)
+  var=$(echo "$value" | cut -d'=' -f2)
   set -- $var
-  serial=$4 
-  
-  # the serial number is 24 digits long, if the parse doesn't meet that 
-  # requirement toss the results and bail on task.
+  serial=$4
+
+  error_msg="WARNING: Unable to automatically update 99-candlelight.rules with the device serial number."
+
   if [ ${#serial} -eq 24 ]; then
-
     echo "Found canable.io serial number: $serial"
-    # replace the template serial number with the actual device serial number
     sed -i "s/000000000000000000000000/$serial/g" "$udev_file"
-
-    diff $template_udev_file $udev_file > /dev/null 2>&1
-    error=$?
-
-    if [ $error -eq 0 ]; then
-      echo $error_msg
+    if diff "$template_udev_file" "$udev_file" > /dev/null 2>&1; then
+      echo "$error_msg"
     fi
-	else
-    echo $error_msg
+  else
+    echo "$error_msg"
   fi
-  
-	echo "==== Install SMA SI driver ===="
-	DBUS_NAME="dbus-sma"
-	DBUS_SMA_DIR="${ROOT_DIR}/data/etc/${DBUS_NAME}"
 
-	mkdir -p ${ROOT_DIR}/var/log/${DBUS_NAME}
-	mkdir -p ${DBUS_SMA_DIR}
-	cp -R  SMAVenusDriver-master/dbus-sma/* ${ROOT_DIR}/data/etc/${DBUS_NAME}
+  echo "==== Installing SMA SI driver ===="
+  DBUS_NAME="dbus-sma"
+  DBUS_SMA_DIR="${ROOT_DIR}/data/etc/${DBUS_NAME}"
 
-  # replace inverter svg with custom yellow sunny island svg
-  cp SMAVenusDriver-master/assets/overview-inverter.svg ${ROOT_DIR}/opt/victronenergy/themes/ccgx/images
+  mkdir -p "${ROOT_DIR}/var/log/${DBUS_NAME}"
+  mkdir -p "${DBUS_SMA_DIR}"
+  cp -R SMAVenusDriver-master/dbus-sma/* "${DBUS_SMA_DIR}/"
 
-	chmod +x ${ROOT_DIR}/data/etc/${DBUS_NAME}/dbus-sma.py
-	chmod +x ${ROOT_DIR}/data/etc/${DBUS_NAME}/service/run
-	chmod +x ${ROOT_DIR}/data/etc/${DBUS_NAME}//service/log/run
-	ln -s ${ROOT_DIR}/opt/victronenergy/vrmlogger/ext/ ${DBUS_SMA_DIR}/ext 
-	ln -s ${DBUS_SMA_DIR}/service ${ROOT_DIR}/service/${DBUS_NAME}
+  # Replace the inverter SVG with a custom yellow Sunny Island version
+  cp SMAVenusDriver-master/assets/overview-inverter.svg "${ROOT_DIR}/opt/victronenergy/themes/ccgx/images"
 
-  # remove archive files
+  chmod +x "${DBUS_SMA_DIR}/dbus-smaDJH.py"
+  chmod +x "${DBUS_SMA_DIR}/service/run"
+  chmod +x "${DBUS_SMA_DIR}/service/log/run"
+  ln -s "${ROOT_DIR}/opt/victronenergy/vrmlogger/ext/" "${DBUS_SMA_DIR}/ext"
+  ln -s "${DBUS_SMA_DIR}/service" "${ROOT_DIR}/service/${DBUS_NAME}"
+
+  # Clean up the extracted driver files
   rm -rf SMAVenusDriver-master/
 
   echo
-	echo "To finish, reboot the Venus OS device"
+  echo "Installation complete. Please reboot the Venus OS device to finalize the installation."
 fi

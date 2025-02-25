@@ -1,8 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""bms_state_machine.py: Statemachine to control the charge profile of the
-                SMA SunnyIsland inverters with Victron Venus OS. """
+"""
+bms_state_machine.py: 
+State machine to control the charge profile of the SMA SunnyIsland inverters with Victron Venus OS.
+"""
 
 __author__      = "github usernames: jaedog"
 __copyright__   = "Copyright 2020"
@@ -13,243 +15,215 @@ import logging
 from statemachine import StateMachine, State
 from datetime import datetime, timedelta
 
-# State machine class, handles state changes as uses 
-# https://github.com/rschrader/python-statemachine
-# install with pip:
-# $ pip install python-statemachine
-#
-
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
+# Uncomment for debugging:
+# logger.setLevel(logging.INFO)
+
 
 class BMSChargeStateMachine(StateMachine):
-  idle = State("Idle", initial=True)#, value=1)
-  bulk_chg = State("ConstCurChg")#, value=2)
-  absorb_chg = State("ConstVoltChg")#, value=3)
-  float_chg = State("FloatChg")#, value=4)
-  canceled = State("CancelChg")#, value=5)
+    idle = State("Idle", initial=True)
+    bulk_charge = State("ConstCurCharge")
+    absorption_charge = State("ConstVoltCharge")
+    float_charge = State("FloatCharge")
+    canceled = State("CancelCharge")
 
-  bulk = idle.to(bulk_chg)
-  absorb = bulk_chg.to(absorb_chg)
-  floating = absorb_chg.to(float_chg)
-  rebulk = bulk_chg.from_(absorb_chg, float_chg)
-  cancel = canceled.from_(bulk_chg, absorb_chg, float_chg)
+    # Define transitions
+    bulk = idle.to(bulk_charge)
+    absorb = bulk_charge.to(absorption_charge)
+    floating = absorption_charge.to(float_charge)
+    rebulk = bulk_charge.from_(absorption_charge, float_charge)
+    cancel = canceled.from_(bulk_charge, absorption_charge, float_charge)
 
-  # canceled is the final state and cannot be cycled back to idle
-  # create a new state machine to restart the charge cycle
-  cycle = bulk | absorb | floating
-  
-  def on_enter_idle(self):
-    if (getattr(self.model, "on_enter_idle", None) != None):
-      self.model.on_enter_idle()
+    # "cycle" is a union of the main charge states
+    cycle = bulk | absorb | floating
 
-  def on_enter_bulk_chg(self):
-    if (getattr(self.model, "on_enter_bulk_chg", None) != None):
-      self.model.on_enter_bulk_chg()
+    def on_enter_idle(self):
+        if hasattr(self.model, "on_enter_idle"):
+            self.model.on_enter_idle()
 
-  def on_enter_absorb_chg(self):
-    if (getattr(self.model, "on_enter_absorb_chg", None) != None):
-      self.model.on_enter_absorb_chg()
-      
-  def on_enter_float_chg(self):
-    if (getattr(self.model, "on_enter_float_chg", None) != None):
-      self.model.on_enter_float_chg()
+    def on_enter_bulk_charge(self):
+        if hasattr(self.model, "on_enter_bulk_charge"):
+            self.model.on_enter_bulk_charge()
 
-# Charge Model, contains the model of the bms charger
-class BMSChargeModel(object):
-  def __init__(self, charge_bulk_current, charge_absorb_voltage, \
-     charge_float_voltage, time_min_absorb, rebulk_voltage):
-    self.charge_absorb_voltage = charge_absorb_voltage
-    self.charge_bulk_current = charge_bulk_current
-    self.original_bulk_current = charge_bulk_current
-    self.charge_float_voltage = charge_float_voltage
-    self.time_min_absorb = time_min_absorb
-    self.rebulk_voltage = rebulk_voltage
+    def on_enter_absorption_charge(self):
+        if hasattr(self.model, "on_enter_absorption_charge"):
+            self.model.on_enter_absorption_charge()
 
-    self.actual_voltage = 0.0
-    self.last_error = 0.0
-    self.actual_current = 0.0
-    self.set_current = 0.0
-    
-    # init callback
-    self.state_changed = False
-    self.check_state = self.check_idle_state
-    self.last_voltage = 0.0
+    def on_enter_float_charge(self):
+        if hasattr(self.model, "on_enter_float_charge"):
+            self.model.on_enter_float_charge()
 
-  # event callbacks when entering different states    
-  def on_enter_idle(self):
-    self.check_state = self.check_idle_state
-    
-  def on_enter_bulk_chg(self):
-    self.check_state = self.check_bulk_chg_state
 
-  def on_enter_absorb_chg(self):
-    self.check_state = self.check_absorb_chg_state
-    self.start_of_absorb_chg = datetime.now()
-        
-  def on_enter_float_chg(self):
-    self.check_state = self.check_float_chg_state
+class BMSChargeModel:
+    def __init__(self, bulk_current, absorb_voltage, float_voltage, min_absorb_time, rebulk_voltage):
+        # Configuration parameters
+        self.bulk_current = bulk_current
+        self.absorb_voltage = absorb_voltage
+        self.float_voltage = float_voltage
+        self.min_absorb_time = min_absorb_time  # in minutes
+        self.rebulk_voltage = rebulk_voltage
 
-  # functions used for logic on various states
-  def check_idle_state(self):
-    pass
+        self.original_bulk_current = bulk_current
 
-  def update_battery_data(self, voltage, current):
-    # use rounded values in logic
-    self.actual_voltage = round(voltage, 2)
-    self.actual_current = round(current, 1)
+        # Dynamic measurements
+        self.actual_voltage = 0.0
+        self.actual_current = 0.0
+        self.set_current = 0.0
 
-  def check_bulk_chg_state(self):
-    self.set_current = self.charge_bulk_current
-    if (self.actual_voltage >= self.charge_absorb_voltage):
-      #self.set_current = 0
-      # move to next state
-      self.last_voltage = self.actual_voltage
-      return 1
-    return 0
+        # PD loop variables
+        self.last_error = 0.0
+        self.last_voltage = 0.0
 
-  # TODO: WIP, values for testing.................................
-  def do_current_logic(self, set_voltage):
-    # if the batt voltage is greater than the set_voltage, it overshot
-    #if (self.actual_voltage > set_voltage):
-      # if the set current greater than actual, start with actual
-    if (self.set_current > self.actual_current):
-      self.set_current = self.actual_current
+        # State callback pointer – defaults to idle check
+        self.check_state = self.check_idle_state
+        self.state_changed = False
 
-    #if (self.actual_voltage > set_voltage):
-      # lower set current
-      # Simple PD Loop
-    P = 100.0
-    D = 20.0
-    Error = set_voltage - self.actual_voltage
-    change = P*Error + D*(Error - self.last_error)
-    print( "Error: " + str(Error) + " Last Error: " + str(self.last_error) + " Change: " + str(change))
-    self.set_current += change
-    self.last_error = Error
-      #self.set_current -= 0.2
-    #else:
-    #  self.set_current = self.actual_current
+    # State entry callbacks
+    def on_enter_idle(self):
+        self.check_state = self.check_idle_state
 
-    # if set current is below min, set to min
-    if (self.set_current < 0.6):
-      self.set_current = 0.6
+    def on_enter_bulk_charge(self):
+        self.check_state = self.check_bulk_charge_state
 
-    # if the batt voltage is less than the set_voltage, inc current
-    #elif (self.actual_voltage < set_voltage):
-      # if the set current is less than the actual current, start with actual      
-     # if (self.set_current < self.actual_current):
-      #  self.set_current = self.actual_current
+    def on_enter_absorption_charge(self):
+        self.check_state = self.check_absorption_charge_state
+        self.start_absorb_time = datetime.now()
 
-      # inc set current
-     # self.set_current += 0.1
+    def on_enter_float_charge(self):
+        self.check_state = self.check_float_charge_state
 
-      # if set current is greater than max, set it to max
-      #if (self.set_current > 10.0):
-      #  self.set_current = 10.0
+    # Method to update battery data (voltage, current)
+    def update_battery_data(self, voltage, current):
+        self.actual_voltage = round(voltage, 2)
+        self.actual_current = round(current, 1)
 
-    # cap charge current to the bulk_chg state
-    if (self.set_current > self.charge_bulk_current):
-      self.set_current = self.charge_bulk_current
+    def update_state(self):
+        """Calls the current state's check function and returns its value."""
+        return self.check_state()
 
-    self.set_current = round(self.set_current, 1)
+    # State logic methods
+    def check_idle_state(self):
+        # In idle state, no automatic transitions
+        return 0
 
-    logger.info("Actual Current: {0:.1f}A, Set Current: {1:.1f}A, Last Voltage: {2:.2f}V, Actual Voltage: {3:.2f}V"\
-      .format(self.actual_current, self.set_current, self.last_voltage, self.actual_voltage))
+    def check_bulk_charge_state(self):
+        self.set_current = self.bulk_current
+        if self.actual_voltage >= self.absorb_voltage:
+            self.last_voltage = self.actual_voltage
+            return 1  # Trigger transition to absorption charge state
+        return 0
 
-    self.last_voltage = self.actual_voltage
+    def compute_pd_adjustment(self, target_voltage):
+        """Compute the PD-loop adjustment for set_current."""
+        # Control constants
+        P = 100.0
+        D = 20.0
+        error = target_voltage - self.actual_voltage
+        adjustment = P * error + D * (error - self.last_error)
+        logger.info(f"PD Loop: Error={error:.2f}, Last Error={self.last_error:.2f}, Adjustment={adjustment:.2f}")
+        self.last_error = error
+        return adjustment
 
-  def check_absorb_chg_state(self):
-    # if we just transitioned from bulk
-    if (self.state_changed):
-      #self.set_current = 0
-      return 0
+    def do_current_logic(self, target_voltage):
+        # Adjust set_current using PD loop
+        # If set_current is higher than actual current, start with actual current
+        if self.set_current > self.actual_current:
+            self.set_current = self.actual_current
 
-    # if voltage falls below rebulk, go back to bulk
-    if (self.actual_voltage <self.rebulk_voltage):
-      return -1
+        adjustment = self.compute_pd_adjustment(target_voltage)
+        self.set_current += adjustment
 
-    if (datetime.now() - self.start_of_absorb_chg > timedelta(minutes=self.time_min_absorb)):
-      return 1
+        # Enforce a minimum charge current threshold
+        if self.set_current < 0.6:
+            self.set_current = 0.6
 
-    self.do_current_logic( self.charge_absorb_voltage)
-    return 0
-    
-  def check_float_chg_state(self):
-    # if voltage falls below rebulk voltage, go back to bulk
-    if (self.actual_voltage < self.rebulk_voltage):
-      return -1
+        # Cap the charge current to the bulk current limit
+        if self.set_current > self.bulk_current:
+            self.set_current = self.bulk_current
 
-    self.do_current_logic(self.charge_float_voltage)
-    return 0
-    
-# Charge controller, external interface to the bms state machine charger
-class BMSChargeController(object):
-  def __init__(self, charge_bulk_current, charge_absorb_voltage, \
-    charge_float_voltage, time_min_absorb, rebulk_voltage):
-    self.model = BMSChargeModel(charge_bulk_current, charge_absorb_voltage, \
-      charge_float_voltage, time_min_absorb, rebulk_voltage)
-    self.state_machine = BMSChargeStateMachine(self.model)
-    
-  def __str__(self):
-    return "BMS Charge Config, CC: {0}A, CV: {1}V, CV Time: {2} hrs, Float: {3}V" \
-      .format(self.model.charge_bulk_current, self.model.charge_absorb_voltage, \
-        self.model.time_min_absorb, self.model.charge_float_voltage)
-    
-  def update_battery_data(self, voltage, current):
-    self.model.update_battery_data(voltage, current)
-    return self.check_state()
+        self.set_current = round(self.set_current, 1)
+        logger.info(f"Actual Current: {self.actual_current:.1f}A, Set Current: {self.set_current:.1f}A, "
+                    f"Last Voltage: {self.last_voltage:.2f}V, Actual Voltage: {self.actual_voltage:.2f}V")
+        self.last_voltage = self.actual_voltage
 
-  def update_req_bulk_current(self, current):
-    if (current == None):
-      self.model.charge_bulk_current  = self.model.original_bulk_current
-    else:
-      self.model.charge_bulk_current = current
-  
-  def start_charging(self):
-    if (self.state_machine.current_state == self.state_machine.idle):
-      self.state_machine.cycle()
-      return True
-    return False
-    
-  def is_charging(self):
-    if ((self.state_machine.current_state == self.state_machine.bulk_chg) or
-        (self.state_machine.current_state == self.state_machine.absorb_chg) or
-        (self.state_machine.current_state == self.state_machine.float_chg)):
-      return True
-    return False
-      
-  def stop_charging(self):
-    print ("stop_charging")
-    self.state_machine.cancel()
-    
-  def check_state(self):
-    self.state_changed = True
+    def check_absorption_charge_state(self):
+        # On first entry after state change, do nothing
+        if self.state_changed:
+            return 0
 
-    val = self.model.check_state()
-    if (val == 0):
-      self.state_changed = False
-    elif (val == 1):
-      self.state_machine.cycle()
-    elif (val == -1):
-      # rebulk
-      self.state_machine.rebulk()
+        # If voltage falls below rebulk threshold, signal transition to bulk
+        if self.actual_voltage < self.rebulk_voltage:
+            return -1
 
-    return val
-    
-  def get_charge_current(self):
-    return self.model.set_current
-    
-  def get_state(self):
-    return self.state_machine.current_state.value
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+        # If minimum absorption time has passed, signal transition to float charge state
+        if datetime.now() - self.start_absorb_time > timedelta(minutes=self.min_absorb_time):
+            return 1
+
+        self.do_current_logic(self.absorb_voltage)
+        return 0
+
+    def check_float_charge_state(self):
+        # If voltage falls below rebulk threshold, signal transition back to bulk
+        if self.actual_voltage < self.rebulk_voltage:
+            return -1
+
+        self.do_current_logic(self.float_voltage)
+        return 0
+
+
+class BMSChargeController:
+    def __init__(self, bulk_current, absorb_voltage, float_voltage, min_absorb_time, rebulk_voltage):
+        self.model = BMSChargeModel(bulk_current, absorb_voltage, float_voltage, min_absorb_time, rebulk_voltage)
+        self.state_machine = BMSChargeStateMachine(self.model)
+
+    def __str__(self):
+        return (f"BMS Charge Config, Bulk Current: {self.model.bulk_current}A, "
+                f"Absorb Voltage: {self.model.absorb_voltage}V, "
+                f"Min Absorb Time: {self.model.min_absorb_time} min, "
+                f"Float Voltage: {self.model.float_voltage}V")
+
+    def update_battery_data(self, voltage, current):
+        self.model.update_battery_data(voltage, current)
+        return self.check_state()
+
+    def update_required_bulk_current(self, current):
+        if current is None:
+            self.model.bulk_current = self.model.original_bulk_current
+        else:
+            self.model.bulk_current = current
+
+    def start_charging(self):
+        if self.state_machine.current_state == self.state_machine.idle:
+            self.state_machine.cycle()
+            return True
+        return False
+
+    def is_charging(self):
+        cs = self.state_machine.current_state
+        return cs in (self.state_machine.bulk_charge, 
+                      self.state_machine.absorption_charge, 
+                      self.state_machine.float_charge)
+
+    def stop_charging(self):
+        print("stop_charging")
+        self.state_machine.cancel()
+
+    def check_state(self):
+        # Flag that a state change check is in progress
+        self.model.state_changed = True
+
+        val = self.model.update_state()
+        if val == 0:
+            self.model.state_changed = False
+        elif val == 1:
+            self.state_machine.cycle()  # transition to next state
+        elif val == -1:
+            self.state_machine.rebulk()  # transition to bulk state
+
+        return val
+
+    def get_charge_current(self):
+        return self.model.set_current
+
+    def get_state(self):
+        return self.state_machine.current_state.value

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-dbus-sma.py: Driver to integrate SMA SunnyIsland inverters
+dbus-sma.py: Driver to integrate SMA SunnyIsland inverters 
 with Victron Venus OS.
 
 Authors: github usernames: madsci1016, jaedog
@@ -29,8 +29,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 import dbus
 
 # import gobject -> Replaced in py3, but the new import also depends on the pyobject version installed.
-#from gi.repository import GObject as gobject
-from gi.repository import GLib
+from gi.repository import GObject as gobject
 
 # Victron packages (from velib_python)
 script_path = os.path.abspath(__file__) if '__file__' in globals() else os.getcwd()
@@ -195,8 +194,7 @@ class SmaDriver:
 
         logger.debug("Initializing CAN bus...")
         try:
-            #self._can_bus = can.interface.Bus(bustype=canBusType, channel=canBusChannel, bitrate=500000)
-            self._can_bus = can.Bus(interface="socketcan", channel=canBusChannel, bitrate=500000)
+            self._can_bus = can.interface.Bus(bustype=canBusType, channel=canBusChannel, bitrate=500000)
         except can.CanError as e:
             logger.error(e)
 
@@ -223,9 +221,9 @@ class SmaDriver:
         self._changed = True
 
         # Create timers (in milliseconds) for CAN transmit, energy update, and CAN parsing.
-        GLib.timeout_add(2000, exit_on_error, self._can_bus_txmit_handler)
-        GLib.timeout_add(2000, exit_on_error, self._energy_handler)
-        GLib.timeout_add(20, exit_on_error, self._parse_can_data_handler)
+        gobject.timeout_add(2000, exit_on_error, self._can_bus_txmit_handler)
+        gobject.timeout_add(2000, exit_on_error, self._energy_handler)
+        gobject.timeout_add(20, exit_on_error, self._parse_can_data_handler)
 
     def __del__(self):
         if self._can_bus:
@@ -236,8 +234,7 @@ class SmaDriver:
     def run(self):
         """Start and run the main loop."""
         logger.info("Starting mainloop; responding to events only.")
-        #self._mainloop = gobject.MainLoop()
-        self._mainloop = GLib.MainLoop()
+        self._mainloop = gobject.MainLoop()
         try:
             self._mainloop.run()
         except KeyboardInterrupt:
@@ -621,10 +618,8 @@ class SmaDriver:
 
         try:
             for m in (msg, msg2, msg3, msg4, msg5, msg6):
-                while self._can_bus.recv(0.01) is not None:
-                    time.sleep(0.01)
                 self._can_bus.send(m)
-                time.sleep(1)
+                time.sleep(0.1)
         except can.CanError as e:
             logger.error("CAN BUS Transmit error (is controller missing?): %s", e)
         except KeyboardInterrupt:
@@ -639,11 +634,11 @@ class SmaDriver:
         """
         try:
             dir_path = os.path.dirname(os.path.realpath(__file__))
-            with open(os.path.join(dir_path, "dbus-sma.yaml"), "r") as yamlfile:
+            with open(os.path.join(dir_path, "dbus-smaDJH.yaml"), "r") as yamlfile:
                 config = yaml.load(yamlfile, Loader=yaml.FullLoader)
                 return config
         except Exception:
-            logger.info("dbus-sma.yaml file not found or incorrect.")
+            logger.info("dbus-smaDJH.yaml file not found or incorrect.")
             sys.exit(1)
 
 
