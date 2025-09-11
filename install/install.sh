@@ -46,9 +46,9 @@ then
 
 	echo "==== Download driver and library ===="
 
-	wget https://github.com/madsci1016/SMAVenusDriver/archive/master.zip
-	unzip -qo master.zip
-	rm master.zip
+	wget https://github.com/kommando828/SMAVenusDriver-master-py3/archive/refs/heads/main.zip
+	unzip -qo main.zip
+	rm main.zip
 
 	echo "==== Add canable device to udev ===="
 
