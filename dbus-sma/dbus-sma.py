@@ -27,6 +27,7 @@ import can
 from can.bus import BusState
 from dbus.mainloop.glib import DBusGMainLoop
 import dbus
+from gi.repository import GObject as gobject
 
 # import gobject -> Replaced in py3, but the new import also depends on the pyobject version installed.
 #from gi.repository import GObject as gobject
