@@ -27,7 +27,7 @@ class BMSChargeStateMachine(StateMachine):
   bulk_chg = State("ConstCurChg")#, value=2)
   absorb_chg = State("ConstVoltChg")#, value=3)
   float_chg = State("FloatChg")#, value=4)
-  canceled = State("CancelChg")#, value=5)
+  canceled = State("CancelChg" ,final=True)#, value=5)
 
   bulk = idle.to(bulk_chg)
   absorb = bulk_chg.to(absorb_chg)
