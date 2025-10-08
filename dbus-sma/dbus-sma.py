@@ -248,7 +248,7 @@ class SmaDriver:
         return DbusMonitor(*args, **kwargs)
 
     def _create_dbus_service(self):
-        dbusservice = VeDbusService(driver['connection'])
+        dbusservice = VeDbusService(driver['connection'], register=False)
         dbusservice.add_mandatory_paths(
             processname=__file__,
             processversion=softwareVersion,
